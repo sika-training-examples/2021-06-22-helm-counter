@@ -1,0 +1,113 @@
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: {{ .Release.Name }}-redis
+  labels:
+    project: counter
+spec:
+  serviceName: redis
+  selector:
+    matchLabels:
+      release: {{ .Release.Name }}
+      project: counter
+      app: redis
+  template:
+    metadata:
+      labels:
+        release: {{ .Release.Name }}
+        project: counter
+        app: redis
+    spec:
+      containers:
+        - name: redis
+          image: redis
+          resources:
+            requests:
+              cpu: 10m
+              memory: 20Mi
+            limits:
+              cpu: 30m
+              memory: 50Mi
+          ports:
+            - containerPort: 6379
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ .Release.Name }}-redis-is-awesme
+  labels:
+    project: counter
+spec:
+  ports:
+    - port: 6379
+  selector:
+    release: {{ .Release.Name }}
+    project: counter
+    app: redis
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ .Release.Name }}-counter
+  labels:
+    project: counter
+spec:
+  selector:
+    matchLabels:
+      release: {{ .Release.Name }}
+      project: counter
+      app: counter
+  replicas: {{ .Values.replicas }}
+  template:
+    metadata:
+      labels:
+        release: {{ .Release.Name }}
+        project: counter
+        app: counter
+    spec:
+      containers:
+        - name: counter
+          image: ondrejsika/counter
+          resources:
+            requests:
+              cpu: 20m
+              memory: 10Mi
+          env:
+            - name: REDIS
+              value: {{ .Release.Name }}-redis-is-awesme
+          ports:
+            - containerPort: 80
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ .Release.Name }}-counter
+  labels:
+    project: counter
+spec:
+  type: NodePort
+  ports:
+    - port: 80
+  selector:
+    release: {{ .Release.Name }}
+    project: counter
+    app: counter
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: {{ .Release.Name }}-counter
+  labels:
+    project: counter
+spec:
+  rules:
+    - host: {{ required ".Values.host is required" .Values.host }}
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: {{ .Release.Name }}-counter
+                port:
+                  number: 80
